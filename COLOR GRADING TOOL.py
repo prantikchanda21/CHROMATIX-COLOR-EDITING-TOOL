@@ -251,12 +251,24 @@ with col2:
             else:
                 raw_image = Image.open(uploaded_file).convert('RGB')
                 image_array = np.array(raw_image)
-        
+                
+            # ==========================================================
+            # MEMORY OPTIMIZATION: Downscale to prevent RAM crash
+            # ==========================================================
+            max_dimension = 1280
+            height, width = image_array.shape[:2]
+            if max(height, width) > max_dimension:
+                scale = max_dimension / float(max(height, width))
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                image_array = cv2.resize(image_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+
         st.markdown(f'''
         <div class="status-box">
             TARGET........: {uploaded_file.name}<br>
             NETWORK.......: NVIDIA SEGFORMER (150 CLASSES)<br>
-            COMPOSITING...: TRI-LAYER AI + LUMINOSITY MASKS
+            COMPOSITING...: TRI-LAYER AI + LUMINOSITY MASKS<br>
+            RESOLUTION....: SCALED FOR CLOUD MEMORY LIMITS
         </div><br>
         ''', unsafe_allow_html=True)
 
@@ -264,7 +276,7 @@ with col2:
         with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
             final_image, ui_map, shadow_map = grader.composite_image(environment, weather, lighting)
             
-        st.markdown("SOURCE IMAGE AND IMAGE PROCESSING AND FINAL IMAGE")
+        st.markdown("### // RENDER & ISOLATION MASKS")
         img_col1, img_col2, img_col3, img_col4 = st.columns(4)
         with img_col1:
             st.image(image_array, caption="SOURCE", use_container_width=True)
@@ -279,10 +291,8 @@ with col2:
         buffer = io.BytesIO()
         Image.fromarray(final_image).save(buffer, format="JPEG", quality=95)
         st.download_button(
-            label="[ EXPORT MEDIA ]",
+            label="[ EXPORT MASTER COMPOSITE ]",
             data=buffer.getvalue(),
             file_name=f"chroma_multilayer.jpg",
             mime="image/jpeg",
         )
-    else:
-        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION</div>', unsafe_allow_html=True)
