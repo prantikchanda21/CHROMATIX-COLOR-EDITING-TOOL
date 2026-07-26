@@ -1,0 +1,288 @@
+import cv2
+import numpy as np
+from PIL import Image
+import streamlit as st
+import rawpy
+import io
+import torch
+from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
+
+# ==============================================================================
+# 1. MASSIVE CONTEXT MATRICES (150+ CONDITIONS)
+# ==============================================================================
+
+GEO_MATRIX = {
+    "Neutral": (0, 1.0), "Urban / City": (-5, 0.85), "Forest / Jungle": (5, 1.15), "Desert": (25, 1.1),
+    "Ocean / Beach": (-15, 1.2), "Mountains / Alpine": (-20, 1.05), "Indoor / Studio": (5, 0.95),
+    "Cyberpunk Cityscape": (-10, 1.4), "Abandoned Factory": (-5, 0.7), "Neon Alleyway": (10, 1.3),
+    "Glacier / Ice Cave": (-35, 1.1), "Redwood Forest": (15, 1.1), "Space Station": (-25, 0.8),
+    "Volcanic Crater": (40, 1.2), "Coral Reef": (5, 1.4), "Salt Flat": (15, 0.9),
+    "Zen Garden": (5, 1.0), "Bamboo Forest": (0, 1.25), "Martian Surface": (45, 1.2),
+    "Lunar Crater": (-20, 0.5), "Post-Apocalyptic Wasteland": (15, 0.6), "Suburban Street": (5, 1.0),
+    "Shopping Mall": (-5, 1.1), "Subway Station": (-10, 0.9), "Airport Terminal": (-15, 0.85),
+    "Gothic Cathedral": (-20, 0.75), "High-Tech Laboratory": (-30, 0.9), "Antique Library": (25, 0.85),
+    "Music Festival": (10, 1.3), "Amusement Park": (5, 1.35), "Haunted Mansion": (-25, 0.6),
+    "Casino Floor": (15, 1.25), "Sports Stadium": (-5, 1.1), "Ancient Pyramid": (30, 1.05),
+    "Deep Ocean Trench": (-40, 0.5), "Floating Island": (10, 1.2), "Overgrown Highway": (5, 1.1),
+    "Cyberpunk Slum": (-15, 1.3), "Victorian London": (-10, 0.7), "Neon Tokyo": (15, 1.4),
+    "Favela / Shanty Town": (20, 1.15), "Medieval Castle": (-15, 0.8), "Underground Bunker": (-20, 0.7),
+    "Tundra / Permafrost": (-30, 0.85), "Tropical Island": (15, 1.3), "Savanna / Grassland": (25, 1.15),
+    "Canyon / Badlands": (20, 1.1), "Swamp / Mangrove": (10, 1.1), "Farmland / Rural": (15, 1.1)
+}
+
+WEATHER_MATRIX = {
+    "Neutral": (0, 1.0), "Sunny / Clear": (5, 1.1), "Overcast / Rainy": (-15, 0.8), "Snow": (15, 1.05),
+    "Stormy / Dark": (-20, 0.6), "Fog / Mist": (-5, 0.7), "Thunderstorm / Lightning": (-25, 0.7),
+    "Acid Rain": (10, 1.2), "Toxic Smog / Pollution": (15, 0.6), "Aurora Borealis": (-30, 1.4),
+    "Wildfire Smoke": (35, 0.7), "Blood Moon": (40, 0.9), "Pitch Black Night": (-30, 0.4),
+    "Sandstorm / Dust": (40, 0.9), "Blizzard / Whiteout": (10, 0.5), "Hail / Sleet": (-15, 0.8),
+    "Drizzle / Light Rain": (-10, 0.9), "Rainbow / Post-Rain": (10, 1.25), "Humid / Muggy": (15, 1.1),
+    "Windy / Autumn Leaves": (20, 1.15), "Heatwave / Haze": (30, 0.9), "Eclipse / Unearthly": (-20, 0.5),
+    "Ash Fall": (-10, 0.4), "Sun Showers": (10, 1.15), "Heavy Monsoon": (-15, 0.85),
+    "Freezing Rain": (-20, 0.9), "Sea Mist": (-10, 0.8), "Morning Dew": (5, 1.1),
+    "Solar Flare / Radiation": (40, 1.3), "Pollen Storm": (20, 1.2), "Tornado / Hurricane": (-25, 0.6),
+    "Frost / Rime": (-15, 0.95), "Golden Mist": (25, 0.9), "Crimson Sky": (35, 1.2),
+    "Purple Haze": (-10, 1.1), "Midnight Sun": (15, 0.8), "White Nights": (-5, 0.7),
+    "Meteor Shower": (-20, 0.85), "Supercell Cloud": (-30, 0.65), "Mammatus Clouds": (-15, 0.8),
+    "God Rays": (20, 1.1), "Dry Lightning": (10, 0.7), "Freezing Fog": (-25, 0.6),
+    "Volcanic Lightning": (25, 1.3), "Sweltering Humidity": (15, 1.1), "Crisp Winter": (-20, 1.0),
+    "Radioactive Fallout": (15, 1.4), "Time Rift / Anomaly": (-40, 1.5), "Ethereal Fog": (-15, 0.5)
+}
+
+LIGHTING_MATRIX = {
+    "Neutral": (0, 1.0), "Golden Hour": (20, 1.25), "Blue Hour / Twilight": (-25, 1.1),
+    "Midday Sun": (-8, 0.95), "Neon / Cyberpunk": (0, 1.5), "Night / Low Light": (10, 0.85),
+    "Sodium Vapor Lamps": (30, 0.9), "Fluorescent Green (Matrix)": (-15, 1.3), 
+    "Red Room / Darkroom": (50, 1.5), "Lightning Flash": (-40, 0.5), "Rim Lighting": (10, 1.1),
+    "Halogen Floodlights": (-10, 0.8), "Tungsten Bulb": (25, 1.1), "Blacklight / UV": (-40, 1.6),
+    "Disco Ball Reflections": (0, 1.4), "Campfire Glow": (35, 1.2), "Flashlight Beam": (-5, 0.9),
+    "Car Headlights": (-10, 1.0), "Police Sirens (Red/Blue)": (10, 1.3), "Computer Monitor": (-15, 0.8),
+    "Holographic Projection": (-25, 1.2), "Fairy Lights": (15, 1.1), "Chandelier Sparkle": (20, 1.15),
+    "Stained Glass Refraction": (5, 1.4), "Lava Glow": (45, 1.3), "Bioluminescent Fungi": (-30, 1.5),
+    "Phosphorescent Algae": (-35, 1.4), "Camera Obscura": (10, 0.7), "Silhouette / Backlit": (5, 0.6),
+    "Rembrandt Lighting": (15, 1.0), "Split Lighting": (-5, 0.9), "Butterfly Lighting": (5, 1.0),
+    "Interrogation Room": (-20, 0.6), "Stadium Floodlights": (-15, 1.1), "Searchlight Beam": (-10, 0.8),
+    "UFO Abduction Beam": (-30, 1.4), "Cinematic Orange / Teal": (10, 1.25), "Candlelight": (40, 1.1),
+    "Muzzle Flash / Gunshot": (20, 1.1), "Bioluminescent Ocean": (-45, 1.5), "Ethereal Glow": (-10, 0.8),
+    "Harsh Flash / Paparazzi": (-5, 0.9), "Starlight / Astrophotography": (-20, 0.7), 
+    "Window Light / Diffused": (5, 1.05), "Underwater Caustic": (-50, 1.2), "Sunrise / Dawn": (15, 1.15),
+    "Sunset / Dusk": (25, 1.2), "Moonlight / Silver": (-35, 0.6), "Overhead Fluorescent": (-15, 0.8)
+}
+
+# ==============================================================================
+# 2. NVIDIA SEGFORMER ENGINE + LUMINOSITY MASKING
+# ==============================================================================
+
+@st.cache_resource
+def load_ai_model():
+    processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+    model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+    return processor, model
+
+class MultiLayerGrader:
+    def __init__(self, image_array, is_raw=False):
+        self.original_image = image_array.astype(np.uint8)
+        self.is_raw = is_raw
+        self.adjustment_scale = 1.0 if is_raw else 0.4
+        
+        self.sky_mask = None
+        self.subject_mask = None
+        self.env_mask = None
+
+    def generate_semantic_masks(self):
+        """AI classifies the physical objects."""
+        processor, model = load_ai_model()
+        pil_img = Image.fromarray(self.original_image)
+        inputs = processor(images=pil_img, return_tensors="pt")
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+            
+        logits = outputs.logits
+        logits = torch.nn.functional.interpolate(
+            logits, size=self.original_image.shape[:2], mode="bilinear", align_corners=False
+        )
+        
+        segmentation_map = logits.argmax(dim=1)[0].numpy()
+        
+        raw_sky_mask = (segmentation_map == 2).astype(np.float32)
+        raw_subject_mask = ((segmentation_map == 12) | (segmentation_map == 126)).astype(np.float32)
+        raw_env_mask = (1.0 - raw_sky_mask - raw_subject_mask)
+        raw_env_mask = np.clip(raw_env_mask, 0.0, 1.0)
+        
+        self.sky_mask = np.stack([raw_sky_mask]*3, axis=2)
+        self.subject_mask = np.stack([raw_subject_mask]*3, axis=2)
+        self.env_mask = np.stack([raw_env_mask]*3, axis=2)
+
+    def apply_shadow_grade(self, composited_image, total_w):
+        """Mathematical Luminosity Masking strictly for shadows."""
+        # 1. Calculate pure lightness (Luma) of the final image
+        luma = cv2.cvtColor(composited_image, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        
+        # 2. Create a soft shadow mask (Isolates the darkest 40% of the image)
+        # 1.0 = Pure Black. 0.0 = Midtones and Highlights.
+        shadow_mask = np.clip(1.0 - (luma / 0.4), 0.0, 1.0)
+        shadow_mask_3d = np.stack([shadow_mask]*3, axis=2)
+        
+        # 3. Create the Tinted Shadow Array
+        shadow_layer = composited_image.copy().astype(np.float32)
+        
+        if total_w < 0:
+            # Cold Environment: Inject Teal/Blue into Shadows
+            shadow_layer[:,:,0] -= 25 * self.adjustment_scale  # Cut Red
+            shadow_layer[:,:,1] += 10 * self.adjustment_scale  # Boost Green (for teal)
+            shadow_layer[:,:,2] += 30 * self.adjustment_scale  # Boost Blue
+        else:
+            # Warm Environment: Inject Amber/Red into Shadows
+            shadow_layer[:,:,0] += 25 * self.adjustment_scale  # Boost Red
+            shadow_layer[:,:,1] += 5  * self.adjustment_scale  # Slight Green (for orange)
+            shadow_layer[:,:,2] -= 20 * self.adjustment_scale  # Cut Blue
+            
+        shadow_layer = np.clip(shadow_layer, 0, 255)
+        
+        # 4. Blend the split-toning only where shadows exist
+        final_img = (composited_image * (1.0 - shadow_mask_3d)) + (shadow_layer * shadow_mask_3d)
+        
+        return final_img.astype(np.uint8), (shadow_mask * 255).astype(np.uint8)
+
+    def adjust_temperature(self, image, base_warmth_factor, scale_modifier=1.0):
+        warmth_factor = base_warmth_factor * self.adjustment_scale * scale_modifier
+        img_float = image.astype(np.float32)
+        if warmth_factor > 0:
+            img_float[:, :, 0] += warmth_factor * 1.05 
+            img_float[:, :, 2] -= warmth_factor       
+        elif warmth_factor < 0:
+            img_float[:, :, 2] -= warmth_factor * 1.05 
+            img_float[:, :, 0] += warmth_factor       
+        return np.clip(img_float, 0, 255).astype(np.uint8)
+
+    def adjust_hsv(self, image, base_saturation, scale_modifier=1.0):
+        sat = 1.0 + (base_saturation - 1.0) * self.adjustment_scale * scale_modifier
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV).astype(np.float32)
+        hsv[:, :, 1] *= sat
+        hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+        return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+
+    def composite_image(self, environment, weather, lighting):
+        self.generate_semantic_masks()
+        
+        geo_w, geo_s = GEO_MATRIX.get(environment, (0, 1.0))
+        wea_w, wea_s = WEATHER_MATRIX.get(weather, (0, 1.0))
+        lig_w, lig_s = LIGHTING_MATRIX.get(lighting, (0, 1.0))
+
+        total_w = geo_w + wea_w + lig_w
+        total_s = geo_s * wea_s * lig_s
+
+        # 1. GRADE SUBJECT (Protective)
+        lab = cv2.cvtColor(self.original_image, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        cl = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(4,4)).apply(l)
+        subject = cv2.cvtColor(cv2.merge((cl,a,b)), cv2.COLOR_LAB2RGB)
+        subject = self.adjust_temperature(subject, 5)
+        
+        # 2. GRADE ENVIRONMENT 
+        env = self.original_image.copy()
+        env = self.adjust_temperature(env, total_w)
+        env = self.adjust_hsv(env, total_s)
+
+        # 3. GRADE SKY (Aggressive scaling)
+        sky = self.original_image.copy()
+        sky = self.adjust_temperature(sky, total_w, scale_modifier=1.5) 
+        sky = self.adjust_hsv(sky, total_s, scale_modifier=1.2)
+        
+        # 4. COMPOSITE AI LAYERS
+        base_composite = (subject * self.subject_mask) + (env * self.env_mask) + (sky * self.sky_mask)
+        base_composite = base_composite.astype(np.uint8)
+        
+        # 5. OVERLAY SHADOW GRADING (Luminosity Mask)
+        final_array, shadow_map_ui = self.apply_shadow_grade(base_composite, total_w)
+        
+        # UI Map (Visualizing the semantic regions)
+        ui_map = np.zeros_like(self.original_image)
+        ui_map[:,:,0] = self.subject_mask[:,:,0] * 255 
+        ui_map[:,:,1] = self.env_mask[:,:,0] * 255     
+        ui_map[:,:,2] = self.sky_mask[:,:,0] * 255     
+        
+        return final_array, ui_map, shadow_map_ui
+
+# ==============================================================================
+# 3. STREAMLIT FRONTEND
+# ==============================================================================
+
+st.set_page_config(page_title="CHROMATIX", layout="wide", initial_sidebar_state="collapsed")
+
+st.markdown("""
+<style>
+    .stApp { background-color: #000000; color: #FFFFFF; font-family: 'Courier New', Courier, monospace; }
+    h1, h2, h3, h4 { color: #FFFFFF !important; font-family: 'Courier New', Courier, monospace; text-transform: uppercase; font-weight: bold; }
+    hr { border-top: 1px solid #333333; }
+    .stButton>button { background-color: transparent !important; color: #FFFFFF !important; border: 1px solid #FFFFFF !important; border-radius: 0px !important; text-transform: uppercase; }
+    .stButton>button:hover { background-color: #FFFFFF !important; color: #000000 !important; }
+    div[data-baseweb="select"] > div { background-color: transparent !important; border: 1px solid #555555 !important; border-radius: 0px !important; color: #FFFFFF !important; }
+    div[data-testid="stFileUploader"] { border: 1px dashed #FFFFFF !important; border-radius: 0px !important; background-color: transparent !important; }
+    .status-box { border: 1px solid #FFFFFF; padding: 15px; font-size: 0.9rem; text-transform: uppercase; }
+    img { border-radius: 0px !important; border: 1px solid #333333; }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("CHROMATIX")
+st.markdown("<hr>", unsafe_allow_html=True)
+
+col1, col2 = st.columns([1, 3])
+
+with col1:
+    st.markdown("EXPLORATION")
+    environment = st.selectbox("Geography", sorted(list(GEO_MATRIX.keys())))
+    weather = st.selectbox("Weather", sorted(list(WEATHER_MATRIX.keys())))
+    lighting = st.selectbox("Lighting", sorted(list(LIGHTING_MATRIX.keys())))
+    st.markdown("<br>", unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("[ SELECT MEDIA ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
+
+with col2:
+    if uploaded_file is not None:
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        is_raw_input = file_extension in ['cr2', 'nef', 'arw', 'dng']
+
+        with st.spinner("Decoding Media Matrices..."):
+            if is_raw_input:
+                uploaded_file.seek(0)
+                with rawpy.imread(uploaded_file) as raw:
+                    image_array = raw.postprocess(use_camera_wb=True)
+            else:
+                raw_image = Image.open(uploaded_file).convert('RGB')
+                image_array = np.array(raw_image)
+        
+        st.markdown(f'''
+        <div class="status-box">
+            TARGET........: {uploaded_file.name}<br>
+            NETWORK.......: NVIDIA SEGFORMER (150 CLASSES)<br>
+            COMPOSITING...: TRI-LAYER AI + LUMINOSITY MASKS
+        </div><br>
+        ''', unsafe_allow_html=True)
+
+        grader = MultiLayerGrader(image_array, is_raw=is_raw_input)
+        with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
+            final_image, ui_map, shadow_map = grader.composite_image(environment, weather, lighting)
+            
+        st.markdown("SOURCE IMAGE AND IMAGE PROCESSING AND FINAL IMAGE")
+        img_col1, img_col2, img_col3, img_col4 = st.columns(4)
+        with img_col1:
+            st.image(image_array, caption="SOURCE", use_container_width=True)
+        with img_col2:
+            st.image(ui_map, caption="RGB AI MAP (R=Subj, G=Env, B=Sky)", use_container_width=True)
+        with img_col3:
+            st.image(shadow_map, caption="LUMA SHADOW MASK", use_container_width=True)
+        with img_col4:
+            st.image(final_image, caption="FINAL MASTER", use_container_width=True)
+            
+        st.markdown("<hr>", unsafe_allow_html=True)
+        buffer = io.BytesIO()
+        Image.fromarray(final_image).save(buffer, format="JPEG", quality=95)
+        st.download_button(
+            label="[ EXPORT MEDIA ]",
+            data=buffer.getvalue(),
+            file_name=f"chroma_multilayer.jpg",
+            mime="image/jpeg",
+        )
+    else:
+        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION</div>', unsafe_allow_html=True)
