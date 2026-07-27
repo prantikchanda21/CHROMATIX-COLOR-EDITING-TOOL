@@ -49,24 +49,57 @@ WEATHER_MATRIX = {
     "Radioactive Fallout": (15, 1.4), "Time Rift / Anomaly": (-40, 1.5), "Ethereal Fog": (-15, 0.5)
 }
 
+# UPDATED: Format -> (Brightness, Gamma, Temperature, Saturation)
 LIGHTING_MATRIX = {
-    "Neutral": (0, 1.0), "Golden Hour": (20, 1.25), "Blue Hour / Twilight": (-25, 1.1),
-    "Midday Sun": (-8, 0.95), "Neon / Cyberpunk": (0, 1.5), "Night / Low Light": (10, 0.85),
-    "Sodium Vapor Lamps": (30, 0.9), "Fluorescent Green (Matrix)": (-15, 1.3), 
-    "Red Room / Darkroom": (50, 1.5), "Lightning Flash": (-40, 0.5), "Rim Lighting": (10, 1.1),
-    "Halogen Floodlights": (-10, 0.8), "Tungsten Bulb": (25, 1.1), "Blacklight / UV": (-40, 1.6),
-    "Disco Ball Reflections": (0, 1.4), "Campfire Glow": (35, 1.2), "Flashlight Beam": (-5, 0.9),
-    "Car Headlights": (-10, 1.0), "Police Sirens (Red/Blue)": (10, 1.3), "Computer Monitor": (-15, 0.8),
-    "Holographic Projection": (-25, 1.2), "Fairy Lights": (15, 1.1), "Chandelier Sparkle": (20, 1.15),
-    "Stained Glass Refraction": (5, 1.4), "Lava Glow": (45, 1.3), "Bioluminescent Fungi": (-30, 1.5),
-    "Phosphorescent Algae": (-35, 1.4), "Camera Obscura": (10, 0.7), "Silhouette / Backlit": (5, 0.6),
-    "Rembrandt Lighting": (15, 1.0), "Split Lighting": (-5, 0.9), "Butterfly Lighting": (5, 1.0),
-    "Interrogation Room": (-20, 0.6), "Stadium Floodlights": (-15, 1.1), "Searchlight Beam": (-10, 0.8),
-    "UFO Abduction Beam": (-30, 1.4), "Cinematic Orange / Teal": (10, 1.25), "Candlelight": (40, 1.1),
-    "Muzzle Flash / Gunshot": (20, 1.1), "Bioluminescent Ocean": (-45, 1.5), "Ethereal Glow": (-10, 0.8),
-    "Harsh Flash / Paparazzi": (-5, 0.9), "Starlight / Astrophotography": (-20, 0.7), 
-    "Window Light / Diffused": (5, 1.05), "Underwater Caustic": (-50, 1.2), "Sunrise / Dawn": (15, 1.15),
-    "Sunset / Dusk": (25, 1.2), "Moonlight / Silver": (-35, 0.6), "Overhead Fluorescent": (-15, 0.8)
+    "Neutral": (0, 1.0, 0, 1.0), 
+    "Golden Hour": (15, 0.9, 20, 1.25), 
+    "Blue Hour / Twilight": (-30, 1.3, -25, 1.1),
+    "Midday Sun": (25, 0.8, -8, 0.95), 
+    "Neon / Cyberpunk": (-15, 1.2, 0, 1.5), 
+    "Night / Low Light": (-60, 1.6, 10, 0.85),
+    "Sodium Vapor Lamps": (-20, 1.2, 30, 0.9), 
+    "Fluorescent Green (Matrix)": (0, 1.1, -15, 1.3), 
+    "Red Room / Darkroom": (-30, 1.4, 50, 1.5), 
+    "Lightning Flash": (60, 0.6, -40, 0.5), 
+    "Rim Lighting": (10, 0.9, 10, 1.1),
+    "Halogen Floodlights": (30, 0.8, -10, 0.8), 
+    "Tungsten Bulb": (10, 1.0, 25, 1.1), 
+    "Blacklight / UV": (-50, 1.5, -40, 1.6),
+    "Disco Ball Reflections": (0, 1.1, 0, 1.4), 
+    "Campfire Glow": (10, 1.1, 35, 1.2), 
+    "Flashlight Beam": (20, 0.9, -5, 0.9),
+    "Car Headlights": (40, 0.8, -10, 1.0), 
+    "Police Sirens (Red/Blue)": (10, 1.0, 10, 1.3), 
+    "Computer Monitor": (5, 1.1, -15, 0.8),
+    "Holographic Projection": (15, 1.0, -25, 1.2), 
+    "Fairy Lights": (5, 1.1, 15, 1.1), 
+    "Chandelier Sparkle": (10, 1.0, 20, 1.15),
+    "Stained Glass Refraction": (-10, 1.2, 5, 1.4), 
+    "Lava Glow": (5, 1.1, 45, 1.3), 
+    "Bioluminescent Fungi": (-40, 1.4, -30, 1.5),
+    "Phosphorescent Algae": (-40, 1.4, -35, 1.4), 
+    "Camera Obscura": (-50, 1.5, 10, 0.7), 
+    "Silhouette / Backlit": (-60, 1.8, 5, 0.6),
+    "Rembrandt Lighting": (0, 1.1, 15, 1.0), 
+    "Split Lighting": (-10, 1.2, -5, 0.9), 
+    "Butterfly Lighting": (15, 0.9, 5, 1.0),
+    "Interrogation Room": (-10, 1.3, -20, 0.6), 
+    "Stadium Floodlights": (40, 0.7, -15, 1.1), 
+    "Searchlight Beam": (30, 0.8, -10, 0.8),
+    "UFO Abduction Beam": (50, 0.6, -30, 1.4), 
+    "Cinematic Orange / Teal": (0, 1.1, 10, 1.25), 
+    "Candlelight": (-20, 1.2, 40, 1.1),
+    "Muzzle Flash / Gunshot": (30, 0.7, 20, 1.1), 
+    "Bioluminescent Ocean": (-50, 1.5, -45, 1.5), 
+    "Ethereal Glow": (20, 0.8, -10, 0.8),
+    "Harsh Flash / Paparazzi": (50, 0.7, -5, 0.9), 
+    "Starlight / Astrophotography": (-60, 1.6, -20, 0.7), 
+    "Window Light / Diffused": (10, 0.9, 5, 1.05), 
+    "Underwater Caustic": (-20, 1.2, -50, 1.2), 
+    "Sunrise / Dawn": (15, 0.9, 15, 1.15),
+    "Sunset / Dusk": (10, 1.0, 25, 1.2), 
+    "Moonlight / Silver": (-40, 1.4, -35, 0.6), 
+    "Overhead Fluorescent": (20, 0.9, -15, 0.8)
 }
 
 # ==============================================================================
@@ -141,10 +174,10 @@ class MultiLayerGrader:
         img_float = image.astype(np.float32)
         if warmth_factor > 0:
             img_float[:, :, 0] += warmth_factor * 1.05 
-            img_float[:, :, 2] -= warmth_factor       
+            img_float[:, :, 2] -= warmth_factor        
         elif warmth_factor < 0:
             img_float[:, :, 2] -= warmth_factor * 1.05 
-            img_float[:, :, 0] += warmth_factor       
+            img_float[:, :, 0] += warmth_factor        
         return np.clip(img_float, 0, 255).astype(np.uint8)
 
     def adjust_hsv(self, image, base_saturation, scale_modifier=1.0):
@@ -154,29 +187,53 @@ class MultiLayerGrader:
         hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
         return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
 
+    # NEW: Adjusts actual exposure and contrast in LAB Lightness Channel
+    def adjust_luminance(self, image, brightness_shift, gamma):
+        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB).astype(np.float32)
+        l, a, b = cv2.split(lab)
+        
+        # Apply absolute brightness shift
+        l = l + (brightness_shift * self.adjustment_scale)
+        
+        # Apply Gamma curve (Contrast/Midtone shift)
+        l = l / 255.0
+        l = np.clip(l, 0.0, 1.0) ** gamma
+        l = l * 255.0
+        
+        lab = cv2.merge((np.clip(l, 0, 255), a, b)).astype(np.uint8)
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
     def composite_image(self, environment, weather, lighting):
         self.generate_semantic_masks()
         
         geo_w, geo_s = GEO_MATRIX.get(environment, (0, 1.0))
         wea_w, wea_s = WEATHER_MATRIX.get(weather, (0, 1.0))
-        lig_w, lig_s = LIGHTING_MATRIX.get(lighting, (0, 1.0))
+        
+        # Pull new 4-parameter lighting config
+        lig_b, lig_g, lig_w, lig_s = LIGHTING_MATRIX.get(lighting, (0, 1.0, 0, 1.0))
 
         total_w = geo_w + wea_w + lig_w
         total_s = geo_s * wea_s * lig_s
 
+        # Subject Base Processing
         lab = cv2.cvtColor(self.original_image, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
         cl = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(4,4)).apply(l)
         subject = cv2.cvtColor(cv2.merge((cl,a,b)), cv2.COLOR_LAB2RGB)
         subject = self.adjust_temperature(subject, 5)
+        subject = self.adjust_luminance(subject, lig_b, lig_g)
         
+        # Environment Base Processing
         env = self.original_image.copy()
         env = self.adjust_temperature(env, total_w)
         env = self.adjust_hsv(env, total_s)
+        env = self.adjust_luminance(env, lig_b, lig_g)
 
+        # Sky Base Processing
         sky = self.original_image.copy()
         sky = self.adjust_temperature(sky, total_w, scale_modifier=1.5) 
         sky = self.adjust_hsv(sky, total_s, scale_modifier=1.2)
+        sky = self.adjust_luminance(sky, lig_b, lig_g)
         
         base_composite = (subject * self.subject_mask) + (env * self.env_mask) + (sky * self.sky_mask)
         base_composite = base_composite.astype(np.uint8)
