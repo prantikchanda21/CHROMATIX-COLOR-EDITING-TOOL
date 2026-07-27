@@ -1,0 +1,17 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # This cron schedule runs the job every day at midnight (UTC)
+    - cron: '0 0 * * *'
+  # This allows you to run the action manually from the GitHub Actions tab if needed
+  workflow_dispatch: 
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit URL
+        run: |
+          curl -sL https://chromatix-color-editing-tool-7cdszq8kzfnivcauucdsgz.streamlit.app/ > /dev/null
+          echo "Streamlit app pinged successfully!"
