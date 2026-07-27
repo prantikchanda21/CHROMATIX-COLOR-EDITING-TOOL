@@ -116,34 +116,27 @@ class MultiLayerGrader:
 
     def apply_shadow_grade(self, composited_image, total_w):
         """Mathematical Luminosity Masking strictly for shadows."""
-        # 1. Calculate pure lightness (Luma) of the final image
         luma = cv2.cvtColor(composited_image, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
         
-        # 2. Create a soft shadow mask (Isolates the darkest 40% of the image)
-        # 1.0 = Pure Black. 0.0 = Midtones and Highlights.
         shadow_mask = np.clip(1.0 - (luma / 0.4), 0.0, 1.0)
         shadow_mask_3d = np.stack([shadow_mask]*3, axis=2)
         
-        # 3. Create the Tinted Shadow Array
         shadow_layer = composited_image.copy().astype(np.float32)
         
         if total_w < 0:
-            # Cold Environment: Inject Teal/Blue into Shadows
-            shadow_layer[:,:,0] -= 25 * self.adjustment_scale  # Cut Red
-            shadow_layer[:,:,1] += 10 * self.adjustment_scale  # Boost Green (for teal)
-            shadow_layer[:,:,2] += 30 * self.adjustment_scale  # Boost Blue
+            shadow_layer[:,:,0] -= 25 * self.adjustment_scale  
+            shadow_layer[:,:,1] += 10 * self.adjustment_scale  
+            shadow_layer[:,:,2] += 30 * self.adjustment_scale  
         else:
-            # Warm Environment: Inject Amber/Red into Shadows
-            shadow_layer[:,:,0] += 25 * self.adjustment_scale  # Boost Red
-            shadow_layer[:,:,1] += 5  * self.adjustment_scale  # Slight Green (for orange)
-            shadow_layer[:,:,2] -= 20 * self.adjustment_scale  # Cut Blue
+            shadow_layer[:,:,0] += 25 * self.adjustment_scale  
+            shadow_layer[:,:,1] += 5  * self.adjustment_scale  
+            shadow_layer[:,:,2] -= 20 * self.adjustment_scale  
             
         shadow_layer = np.clip(shadow_layer, 0, 255)
         
-        # 4. Blend the split-toning only where shadows exist
         final_img = (composited_image * (1.0 - shadow_mask_3d)) + (shadow_layer * shadow_mask_3d)
         
-        return final_img.astype(np.uint8), (shadow_mask * 255).astype(np.uint8)
+        return final_img.astype(np.uint8)
 
     def adjust_temperature(self, image, base_warmth_factor, scale_modifier=1.0):
         warmth_factor = base_warmth_factor * self.adjustment_scale * scale_modifier
@@ -173,37 +166,26 @@ class MultiLayerGrader:
         total_w = geo_w + wea_w + lig_w
         total_s = geo_s * wea_s * lig_s
 
-        # 1. GRADE SUBJECT (Protective)
         lab = cv2.cvtColor(self.original_image, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
         cl = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(4,4)).apply(l)
         subject = cv2.cvtColor(cv2.merge((cl,a,b)), cv2.COLOR_LAB2RGB)
         subject = self.adjust_temperature(subject, 5)
         
-        # 2. GRADE ENVIRONMENT 
         env = self.original_image.copy()
         env = self.adjust_temperature(env, total_w)
         env = self.adjust_hsv(env, total_s)
 
-        # 3. GRADE SKY (Aggressive scaling)
         sky = self.original_image.copy()
         sky = self.adjust_temperature(sky, total_w, scale_modifier=1.5) 
         sky = self.adjust_hsv(sky, total_s, scale_modifier=1.2)
         
-        # 4. COMPOSITE AI LAYERS
         base_composite = (subject * self.subject_mask) + (env * self.env_mask) + (sky * self.sky_mask)
         base_composite = base_composite.astype(np.uint8)
         
-        # 5. OVERLAY SHADOW GRADING (Luminosity Mask)
-        final_array, shadow_map_ui = self.apply_shadow_grade(base_composite, total_w)
+        final_array = self.apply_shadow_grade(base_composite, total_w)
         
-        # UI Map (Visualizing the semantic regions)
-        ui_map = np.zeros_like(self.original_image)
-        ui_map[:,:,0] = self.subject_mask[:,:,0] * 255 
-        ui_map[:,:,1] = self.env_mask[:,:,0] * 255     
-        ui_map[:,:,2] = self.sky_mask[:,:,0] * 255     
-        
-        return final_array, ui_map, shadow_map_ui
+        return final_array
 
 # ==============================================================================
 # 3. STREAMLIT FRONTEND
@@ -231,12 +213,12 @@ st.markdown("<hr>", unsafe_allow_html=True)
 col1, col2 = st.columns([1, 3])
 
 with col1:
-    st.markdown("EXPLORATION")
+    st.markdown("CHOOSE CONDITIONS")
     environment = st.selectbox("Geography", sorted(list(GEO_MATRIX.keys())))
     weather = st.selectbox("Weather", sorted(list(WEATHER_MATRIX.keys())))
     lighting = st.selectbox("Lighting", sorted(list(LIGHTING_MATRIX.keys())))
     st.markdown("<br>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("[ SELECT MEDIA ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
+    uploaded_file = st.file_uploader("[ SELECT IMAGE ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
 
 with col2:
     if uploaded_file is not None:
@@ -252,9 +234,7 @@ with col2:
                 raw_image = Image.open(uploaded_file).convert('RGB')
                 image_array = np.array(raw_image)
                 
-            # ==========================================================
             # MEMORY OPTIMIZATION: Downscale to prevent RAM crash
-            # ==========================================================
             max_dimension = 1280
             height, width = image_array.shape[:2]
             if max(height, width) > max_dimension:
@@ -274,25 +254,23 @@ with col2:
 
         grader = MultiLayerGrader(image_array, is_raw=is_raw_input)
         with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
-            final_image, ui_map, shadow_map = grader.composite_image(environment, weather, lighting)
+            final_image = grader.composite_image(environment, weather, lighting)
             
-        st.markdown("### // RENDER & ISOLATION MASKS")
-        img_col1, img_col2, img_col3, img_col4 = st.columns(4)
+        st.markdown("SOURCE IMAGE VS FINAL IMAGE")
+        img_col1, img_col2 = st.columns(2)
         with img_col1:
-            st.image(image_array, caption="SOURCE", use_container_width=True)
+            st.image(image_array, caption="SOURCE IMAGE", use_container_width=True)
         with img_col2:
-            st.image(ui_map, caption="RGB AI MAP (R=Subj, G=Env, B=Sky)", use_container_width=True)
-        with img_col3:
-            st.image(shadow_map, caption="LUMA SHADOW MASK", use_container_width=True)
-        with img_col4:
-            st.image(final_image, caption="FINAL MASTER", use_container_width=True)
+            st.image(final_image, caption="FINAL IMAGE", use_container_width=True)
             
         st.markdown("<hr>", unsafe_allow_html=True)
         buffer = io.BytesIO()
         Image.fromarray(final_image).save(buffer, format="JPEG", quality=95)
         st.download_button(
-            label="[ EXPORT MASTER COMPOSITE ]",
+            label="[ EXPORT FINAL IMAGE ]",
             data=buffer.getvalue(),
             file_name=f"chroma_multilayer.jpg",
             mime="image/jpeg",
         )
+    else:
+        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION</div>', unsafe_allow_html=True)
