@@ -90,7 +90,6 @@ class MultiLayerGrader:
         self.env_mask = None
 
     def generate_semantic_masks(self):
-        """AI classifies the physical objects."""
         processor, model = load_ai_model()
         pil_img = Image.fromarray(self.original_image)
         inputs = processor(images=pil_img, return_tensors="pt")
@@ -115,7 +114,6 @@ class MultiLayerGrader:
         self.env_mask = np.stack([raw_env_mask]*3, axis=2)
 
     def apply_shadow_grade(self, composited_image, total_w):
-        """Mathematical Luminosity Masking strictly for shadows."""
         luma = cv2.cvtColor(composited_image, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
         
         shadow_mask = np.clip(1.0 - (luma / 0.4), 0.0, 1.0)
@@ -210,18 +208,29 @@ st.markdown("""
 st.title("CHROMATIX")
 st.markdown("<hr>", unsafe_allow_html=True)
 
+# Initialize Session State Memory to protect the images during downloads
+if "master_image" not in st.session_state:
+    st.session_state.master_image = None
+if "source_image" not in st.session_state:
+    st.session_state.source_image = None
+
 col1, col2 = st.columns([1, 3])
 
 with col1:
-    st.markdown("CHOOSE CONDITIONS")
-    environment = st.selectbox("Geography", sorted(list(GEO_MATRIX.keys())))
-    weather = st.selectbox("Weather", sorted(list(WEATHER_MATRIX.keys())))
-    lighting = st.selectbox("Lighting", sorted(list(LIGHTING_MATRIX.keys())))
-    st.markdown("<br>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("[ SELECT IMAGE ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
+    st.markdown("SELECT CONDITIONS")
+    # Wrap the inputs in a Form to stop auto-reloading
+    with st.form("grading_form"):
+        environment = st.selectbox("Geography", sorted(list(GEO_MATRIX.keys())))
+        weather = st.selectbox("Weather", sorted(list(WEATHER_MATRIX.keys())))
+        lighting = st.selectbox("Lighting", sorted(list(LIGHTING_MATRIX.keys())))
+        st.markdown("<br>", unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("[ SELECT IMAGE ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
+        
+        # The form will only execute when this button is pressed
+        render_button = st.form_submit_button("[ INITIATE RENDER ]")
 
 with col2:
-    if uploaded_file is not None:
+    if render_button and uploaded_file is not None:
         file_extension = uploaded_file.name.split('.')[-1].lower()
         is_raw_input = file_extension in ['cr2', 'nef', 'arw', 'dng']
 
@@ -256,16 +265,25 @@ with col2:
         with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
             final_image = grader.composite_image(environment, weather, lighting)
             
+            # Save to Memory Cache
+            st.session_state.source_image = image_array
+            st.session_state.master_image = final_image
+
+    elif render_button and uploaded_file is None:
+         st.markdown('<div class="status-box" style="border-color: red; color: red;">ERROR: NO MEDIA DETECTED. PLEASE UPLOAD A FILE.</div>', unsafe_allow_html=True)
+
+    # Display the stored images if they exist in the memory cache
+    if st.session_state.master_image is not None and uploaded_file is not None:
         st.markdown("SOURCE IMAGE VS FINAL IMAGE")
         img_col1, img_col2 = st.columns(2)
         with img_col1:
-            st.image(image_array, caption="SOURCE IMAGE", use_container_width=True)
+            st.image(st.session_state.source_image, caption="SOURCE", use_container_width=True)
         with img_col2:
-            st.image(final_image, caption="FINAL IMAGE", use_container_width=True)
+            st.image(st.session_state.master_image, caption="FINAL MASTER", use_container_width=True)
             
         st.markdown("<hr>", unsafe_allow_html=True)
         buffer = io.BytesIO()
-        Image.fromarray(final_image).save(buffer, format="JPEG", quality=95)
+        Image.fromarray(st.session_state.master_image).save(buffer, format="JPEG", quality=95)
         st.download_button(
             label="[ EXPORT FINAL IMAGE ]",
             data=buffer.getvalue(),
@@ -273,4 +291,4 @@ with col2:
             mime="image/jpeg",
         )
     else:
-        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION</div>', unsafe_allow_html=True)
+        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION & RENDER INITIATION</div>', unsafe_allow_html=True)
