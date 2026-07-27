@@ -208,87 +208,99 @@ st.markdown("""
 st.title("CHROMATIX")
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Initialize Session State Memory to protect the images during downloads
+# Initialize Session State Memory 
 if "master_image" not in st.session_state:
     st.session_state.master_image = None
 if "source_image" not in st.session_state:
     st.session_state.source_image = None
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename = None
 
 col1, col2 = st.columns([1, 3])
 
 with col1:
     st.markdown("SELECT CONDITIONS")
-    # Wrap the inputs in a Form to stop auto-reloading
+    # 1. FILE UPLOADER MOVED OUTSIDE THE FORM (Triggers instantly)
+    uploaded_file = st.file_uploader("[ SELECT IMAGE ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
+    
+    # 2. THE RENDER FORM
     with st.form("grading_form"):
         environment = st.selectbox("Geography", sorted(list(GEO_MATRIX.keys())))
         weather = st.selectbox("Weather", sorted(list(WEATHER_MATRIX.keys())))
         lighting = st.selectbox("Lighting", sorted(list(LIGHTING_MATRIX.keys())))
         st.markdown("<br>", unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("[ SELECT IMAGE ]", type=["jpg", "png", "jpeg", "cr2", "nef"])
-        
-        # The form will only execute when this button is pressed
         render_button = st.form_submit_button("[ INITIATE RENDER ]")
 
 with col2:
-    if render_button and uploaded_file is not None:
+    if uploaded_file is not None:
         file_extension = uploaded_file.name.split('.')[-1].lower()
         is_raw_input = file_extension in ['cr2', 'nef', 'arw', 'dng']
 
-        with st.spinner("Decoding Media Matrices..."):
-            if is_raw_input:
-                uploaded_file.seek(0)
-                with rawpy.imread(uploaded_file) as raw:
-                    image_array = raw.postprocess(use_camera_wb=True)
-            else:
-                raw_image = Image.open(uploaded_file).convert('RGB')
-                image_array = np.array(raw_image)
+        # Only decode the image if it's a completely new file
+        if st.session_state.uploaded_filename != uploaded_file.name:
+            with st.spinner("Decoding Media Matrices..."):
+                if is_raw_input:
+                    uploaded_file.seek(0)
+                    with rawpy.imread(uploaded_file) as raw:
+                        image_array = raw.postprocess(use_camera_wb=True)
+                else:
+                    raw_image = Image.open(uploaded_file).convert('RGB')
+                    image_array = np.array(raw_image)
+                    
+                # MEMORY OPTIMIZATION: Downscale to prevent RAM crash
+                max_dimension = 1280
+                height, width = image_array.shape[:2]
+                if max(height, width) > max_dimension:
+                    scale = max_dimension / float(max(height, width))
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    image_array = cv2.resize(image_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+
+                # Save new image to session state and reset the render
+                st.session_state.source_image = image_array
+                st.session_state.uploaded_filename = uploaded_file.name
+                st.session_state.master_image = None
+
+        # If the user clicks the submit button, run the AI math
+        if render_button:
+            st.markdown(f'''
+            <div class="status-box">
+                TARGET........: {uploaded_file.name}<br>
+                NETWORK.......: NVIDIA SEGFORMER (150 CLASSES)<br>
+                COMPOSITING...: TRI-LAYER AI + LUMINOSITY MASKS<br>
+                RESOLUTION....: SCALED FOR CLOUD MEMORY LIMITS
+            </div><br>
+            ''', unsafe_allow_html=True)
+
+            grader = MultiLayerGrader(st.session_state.source_image, is_raw=is_raw_input)
+            with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
+                final_image = grader.composite_image(environment, weather, lighting)
+                st.session_state.master_image = final_image
+
+        # DISPLAY LOGIC
+        if st.session_state.master_image is not None:
+            # Show both Source and Render side-by-side
+            st.markdown("SOURCE IMAGE VS FINAL IMAGE")
+            img_col1, img_col2 = st.columns(2)
+            with img_col1:
+                st.image(st.session_state.source_image, caption="SOURCE IMAGE", use_container_width=True)
+            with img_col2:
+                st.image(st.session_state.master_image, caption="FINAL IMAGE", use_container_width=True)
                 
-            # MEMORY OPTIMIZATION: Downscale to prevent RAM crash
-            max_dimension = 1280
-            height, width = image_array.shape[:2]
-            if max(height, width) > max_dimension:
-                scale = max_dimension / float(max(height, width))
-                new_width = int(width * scale)
-                new_height = int(height * scale)
-                image_array = cv2.resize(image_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            st.markdown("<hr>", unsafe_allow_html=True)
+            buffer = io.BytesIO()
+            Image.fromarray(st.session_state.master_image).save(buffer, format="JPEG", quality=95)
+            st.download_button(
+                label="[ EXPORT FINAL IMAGE ]",
+                data=buffer.getvalue(),
+                file_name=f"chroma_multilayer.jpg",
+                mime="image/jpeg",
+            )
+        else:
+            # Only the image is uploaded, no render has happened yet
+            st.markdown('<div class="status-box" style="margin-bottom: 20px;">SYSTEM STATUS : MEDIA LOADED.<br>CONFIGURE MATRICES AND INITIATE RENDER.</div>', unsafe_allow_html=True)
+            st.image(st.session_state.source_image, caption="SOURCE PREVIEW", use_container_width=True)
 
-        st.markdown(f'''
-        <div class="status-box">
-            TARGET........: {uploaded_file.name}<br>
-            NETWORK.......: NVIDIA SEGFORMER (150 CLASSES)<br>
-            COMPOSITING...: TRI-LAYER AI + LUMINOSITY MASKS<br>
-            RESOLUTION....: SCALED FOR CLOUD MEMORY LIMITS
-        </div><br>
-        ''', unsafe_allow_html=True)
-
-        grader = MultiLayerGrader(image_array, is_raw=is_raw_input)
-        with st.spinner(f"Running Pixel Classification & Shadow Mapping..."):
-            final_image = grader.composite_image(environment, weather, lighting)
-            
-            # Save to Memory Cache
-            st.session_state.source_image = image_array
-            st.session_state.master_image = final_image
-
-    elif render_button and uploaded_file is None:
-         st.markdown('<div class="status-box" style="border-color: red; color: red;">ERROR: NO MEDIA DETECTED. PLEASE UPLOAD A FILE.</div>', unsafe_allow_html=True)
-
-    # Display the stored images if they exist in the memory cache
-    if st.session_state.master_image is not None and uploaded_file is not None:
-        st.markdown("SOURCE IMAGE VS FINAL IMAGE")
-        img_col1, img_col2 = st.columns(2)
-        with img_col1:
-            st.image(st.session_state.source_image, caption="SOURCE", use_container_width=True)
-        with img_col2:
-            st.image(st.session_state.master_image, caption="FINAL MASTER", use_container_width=True)
-            
-        st.markdown("<hr>", unsafe_allow_html=True)
-        buffer = io.BytesIO()
-        Image.fromarray(st.session_state.master_image).save(buffer, format="JPEG", quality=95)
-        st.download_button(
-            label="[ EXPORT FINAL IMAGE ]",
-            data=buffer.getvalue(),
-            file_name=f"chroma_multilayer.jpg",
-            mime="image/jpeg",
-        )
     else:
-        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION & RENDER INITIATION</div>', unsafe_allow_html=True)
+        # Default empty state
+        st.markdown('<div class="status-box">SYSTEM STATUS : IDLE<br>AWAITING MEDIA INGESTION</div>', unsafe_allow_html=True)
