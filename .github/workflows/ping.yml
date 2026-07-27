@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Ping Streamlit URL
         run: |
-          curl -sL https://chromatix-color-editing-tool-7cdszq8kzfnivcauucdsgz.streamlit.app/_stcore/health > /dev/null
+          curl -s https://chromatix-color-editing-tool-7cdszq8kzfnivcauucdsgz.streamlit.app/ > /dev/null || true
           echo "Streamlit app pinged successfully!"
